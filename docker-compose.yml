@@ -1,0 +1,97 @@
+services:
+  schema-init:
+    build:
+      context: .
+      target: deps
+      args:
+        DATABASE_URL: ${DATABASE_URL:-postgresql://brochure:brochure@db:5432/brochure_generator}
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://brochure:brochure@db:5432/brochure_generator
+    depends_on:
+      - db
+    command: ['pnpm', 'db:push']
+    restart: 'no'
+
+  app:
+    build:
+      context: .
+      args:
+        DATABASE_URL: ${DATABASE_URL:-postgresql://brochure:brochure@db:5432/brochure_generator}
+        BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+        BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    init: true
+    ipc: host
+    ports:
+      - '3000:3000'
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://brochure:brochure@db:5432/brochure_generator
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_MODEL: ${OPENROUTER_MODEL:-openrouter/elephant-alpha}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_BUCKET: ${MINIO_BUCKET:-brochure-artifacts}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-brochure}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-brochure-secret}
+    depends_on:
+      - schema-init
+      - db
+      - minio
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: brochure_generator
+      POSTGRES_USER: brochure
+      POSTGRES_PASSWORD: brochure
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - '5432:5432'
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: brochure
+      MINIO_ROOT_PASSWORD: brochure-secret
+    volumes:
+      - minio_data:/data
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        until mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"; do
+          sleep 1
+        done
+
+        mc mb -p local/"$${MINIO_BUCKET}" || true
+        mc anonymous set private local/"$${MINIO_BUCKET}" || true
+    environment:
+      MINIO_ROOT_USER: brochure
+      MINIO_ROOT_PASSWORD: brochure-secret
+      MINIO_BUCKET: brochure-artifacts
+
+volumes:
+  pg_data:
+  minio_data:
