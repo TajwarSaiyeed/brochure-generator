@@ -1,12 +1,13 @@
-FROM node:22-bookworm-slim AS base
+# syntax=docker/dockerfile:1.7
+
+FROM mcr.microsoft.com/playwright:v1.58.2-jammy AS base
 
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
-ENV PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends chromium ca-certificates \
+	&& apt-get install -y --no-install-recommends ca-certificates \
 	&& rm -rf /var/lib/apt/lists/* \
 	&& corepack enable
 
@@ -15,12 +16,16 @@ WORKDIR /app
 
 ARG DATABASE_URL=postgresql://brochure:brochure@db:5432/brochure_generator
 ENV DATABASE_URL=$DATABASE_URL
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+	pnpm install --frozen-lockfile --ignore-scripts --store-dir /pnpm/store
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml prisma.config.ts ./
+COPY prisma.config.ts ./
 COPY prisma ./prisma
-RUN pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+	pnpm prisma generate
 
-FROM base AS builder
+FROM deps AS builder
 WORKDIR /app
 
 ARG BETTER_AUTH_URL
@@ -32,11 +37,9 @@ ENV BETTER_AUTH_SECRET=$BETTER_AUTH_SECRET
 ENV NEXT_PUBLIC_APP_URL=$NEXT_PUBLIC_APP_URL
 ENV NEXT_TELEMETRY_DISABLED=1
 
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/generated ./generated
 COPY . .
-
-RUN pnpm build
+RUN --mount=type=cache,id=next-cache,target=/app/.next/cache \
+	pnpm build
 
 FROM base AS runner
 WORKDIR /app

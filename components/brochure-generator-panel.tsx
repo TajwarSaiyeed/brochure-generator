@@ -16,6 +16,7 @@ import {
 } from '@/lib/brochure/state'
 import { stackCards } from '@/lib/site-copy'
 import AccountBanner from './account-banner'
+import BrochureExportPanel from './brochure-export-panel'
 import BrochureGeneratorForm from './brochure-generator-form'
 import BrochurePreviewPanel from './brochure-preview-panel'
 
@@ -126,6 +127,16 @@ export default function BrochureGeneratorPanel() {
         lastUpdated={state.lastUpdated}
         draft={previewDraft}
         error={state.error}
+      />
+
+      <BrochureExportPanel
+        companyName={companyName}
+        companyUrl={companyUrl}
+        audience={audience}
+        tone={tone}
+        sections={sections}
+        draft={state.draft}
+        canExport={Boolean(state.draft.trim())}
       />
 
       <div className="grid gap-4 md:grid-cols-3 lg:col-span-2">

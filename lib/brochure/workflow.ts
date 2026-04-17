@@ -1,4 +1,6 @@
 import { recordBrochureRun } from '@/lib/brochure-runs'
+import { createBrochureDocument } from './document'
+import type { BrochureDocument } from './document'
 import {
   formatScrapedPageContext,
   scrapeBrochureSource,
@@ -31,6 +33,7 @@ const openRouterModel =
 
 type BrochureWorkflowResult = {
   draft: string
+  document: BrochureDocument
   scrapedPage: ScrapedPage | null
   storageBucket: string | null
   storageKey: string | null
@@ -254,6 +257,7 @@ export async function generateBrochureDraft(
 ): Promise<BrochureWorkflowResult> {
   const scrapedPage = await scrapeBrochureSource(input.companyUrl)
   const draft = await readOpenRouterMarkdown(input, scrapedPage)
+  const document = createBrochureDocument(input, draft)
 
   let storageBucket: string | null = null
   let storageKey: string | null = null
@@ -262,7 +266,7 @@ export async function generateBrochureDraft(
     const artifact = await storeBrochureArtifact({
       companyName: input.companyName,
       companyUrl: input.companyUrl,
-      markdown: draft,
+      markdown: document.markdown,
     })
 
     storageBucket = artifact?.bucket ?? null
@@ -288,7 +292,8 @@ export async function generateBrochureDraft(
   }
 
   return {
-    draft,
+    draft: document.markdown,
+    document,
     scrapedPage,
     storageBucket,
     storageKey,

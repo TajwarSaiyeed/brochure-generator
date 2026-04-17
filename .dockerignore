@@ -1,7 +1,13 @@
 .git
 .next
 node_modules
+generated
+tmp
 coverage
+dist
+out
+playwright-report
+test-results
 npm-debug.log*
 pnpm-debug.log*
 .env
@@ -9,5 +15,11 @@ pnpm-debug.log*
 .env.development.local
 .env.test.local
 .env.production.local
+.turbo
+.cache
+.vscode
+.idea
+*.tsbuildinfo
 README.md
 agents
+prisma-docs
