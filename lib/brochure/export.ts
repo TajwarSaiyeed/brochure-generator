@@ -7,6 +7,7 @@ import {
   TextRun,
 } from 'docx'
 import { chromium } from 'playwright'
+import { getChromiumLaunchOptions } from '@/lib/chromium'
 import {
   renderBrochureHtml,
   renderBrochureMarkdown,
@@ -77,10 +78,7 @@ export async function exportBrochureDocx(document: BrochureDocument) {
 }
 
 export async function exportBrochurePdf(document: BrochureDocument) {
-  const browser = await chromium.launch({
-    headless: true,
-    args: ['--no-sandbox', '--disable-dev-shm-usage'],
-  })
+  const browser = await chromium.launch(getChromiumLaunchOptions())
 
   try {
     const page = await browser.newPage({

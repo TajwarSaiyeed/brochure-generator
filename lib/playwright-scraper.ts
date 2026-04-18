@@ -1,11 +1,5 @@
 import { chromium, type Browser, type BrowserContext } from 'playwright'
-
-const browserLaunchOptions = {
-  headless: true,
-  args: ['--no-sandbox', '--disable-dev-shm-usage'],
-  executablePath:
-    process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ?? '/usr/bin/chromium',
-}
+import { getChromiumLaunchOptions } from '@/lib/chromium'
 
 export async function renderBrochureSourceHtml(sourceUrl: string) {
   let parsedUrl: URL
@@ -20,7 +14,7 @@ export async function renderBrochureSourceHtml(sourceUrl: string) {
   let context: BrowserContext | undefined
 
   try {
-    browser = await chromium.launch(browserLaunchOptions)
+    browser = await chromium.launch(getChromiumLaunchOptions())
 
     context = await browser.newContext({
       userAgent: 'Brochure Forge Scraper/1.0',

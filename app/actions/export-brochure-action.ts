@@ -50,112 +50,127 @@ function getRequiredText(formData: FormData, key: string) {
   return typeof value === 'string' ? value : ''
 }
 
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+
+  return 'Unable to export the brochure.'
+}
+
 export async function exportBrochureAction(
   formData: FormData,
 ): Promise<BrochureExportResult> {
-  const format = String(
-    formData.get('format') ?? '',
-  ).toLowerCase() as BrochureExportFormat
-  const request = parseBrochureFormData(formData)
-  const markdown = getRequiredText(formData, 'markdown').trim()
+  try {
+    const format = String(
+      formData.get('format') ?? '',
+    ).toLowerCase() as BrochureExportFormat
+    const request = parseBrochureFormData(formData)
+    const markdown = getRequiredText(formData, 'markdown').trim()
 
-  if (!markdown) {
+    if (!markdown) {
+      return {
+        ok: false,
+        error: 'A generated brochure draft is required before exporting.',
+      }
+    }
+
+    const document = createBrochureDocument(request, markdown)
+
+    if (format === 'html') {
+      return {
+        ok: true,
+        format,
+        fileName: createBrochureFileName(document.companyName, 'html'),
+        contentType: 'text/html; charset=utf-8',
+        html: renderBrochureHtml(document),
+      }
+    }
+
+    if (format === 'md') {
+      return {
+        ok: true,
+        format,
+        fileName: createBrochureFileName(document.companyName, 'md'),
+        contentType: 'text/markdown; charset=utf-8',
+        contentBase64: encodeBuffer(
+          Buffer.from(renderBrochureMarkdown(document), 'utf8'),
+        ),
+      }
+    }
+
+    if (format === 'docx') {
+      const docxBuffer = await exportBrochureDocx(document)
+
+      return {
+        ok: true,
+        format,
+        fileName: createBrochureFileName(document.companyName, 'docx'),
+        contentType:
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        contentBase64: encodeBuffer(docxBuffer),
+      }
+    }
+
+    if (format === 'bundle') {
+      const [pdfBuffer, docxBuffer] = await Promise.all([
+        exportBrochurePdf(document),
+        exportBrochureDocx(document),
+      ])
+      const zip = new JSZip()
+      const baseFileName = createSlug(document.companyName)
+
+      zip.file(`${baseFileName}.md`, renderBrochureMarkdown(document))
+      zip.file(`${baseFileName}.html`, renderBrochureHtml(document))
+      zip.file(`${baseFileName}.pdf`, pdfBuffer)
+      zip.file(`${baseFileName}.docx`, docxBuffer)
+      zip.file(
+        'manifest.json',
+        JSON.stringify(
+          {
+            companyName: document.companyName,
+            companyUrl: document.companyUrl,
+            audience: document.audience,
+            tone: document.tone,
+            createdAt: document.createdAt,
+            formats: ['md', 'html', 'pdf', 'docx'],
+          },
+          null,
+          2,
+        ),
+      )
+
+      const bundleBuffer = await zip.generateAsync({ type: 'nodebuffer' })
+
+      return {
+        ok: true,
+        format,
+        fileName: `${baseFileName}-bundle.zip`,
+        contentType: 'application/zip',
+        contentBase64: encodeBuffer(bundleBuffer),
+      }
+    }
+
+    if (format === 'pdf') {
+      const pdfBuffer = await exportBrochurePdf(document)
+
+      return {
+        ok: true,
+        format,
+        fileName: createBrochureFileName(document.companyName, 'pdf'),
+        contentType: 'application/pdf',
+        contentBase64: encodeBuffer(pdfBuffer),
+      }
+    }
+
     return {
       ok: false,
-      error: 'A generated brochure draft is required before exporting.',
+      error: 'Unsupported export format.',
     }
-  }
-
-  const document = createBrochureDocument(request, markdown)
-
-  if (format === 'html') {
+  } catch (error) {
     return {
-      ok: true,
-      format,
-      fileName: createBrochureFileName(document.companyName, 'html'),
-      contentType: 'text/html; charset=utf-8',
-      html: renderBrochureHtml(document),
+      ok: false,
+      error: getErrorMessage(error),
     }
-  }
-
-  if (format === 'md') {
-    return {
-      ok: true,
-      format,
-      fileName: createBrochureFileName(document.companyName, 'md'),
-      contentType: 'text/markdown; charset=utf-8',
-      contentBase64: encodeBuffer(
-        Buffer.from(renderBrochureMarkdown(document), 'utf8'),
-      ),
-    }
-  }
-
-  if (format === 'docx') {
-    const docxBuffer = await exportBrochureDocx(document)
-
-    return {
-      ok: true,
-      format,
-      fileName: createBrochureFileName(document.companyName, 'docx'),
-      contentType:
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      contentBase64: encodeBuffer(docxBuffer),
-    }
-  }
-
-  if (format === 'bundle') {
-    const [pdfBuffer, docxBuffer] = await Promise.all([
-      exportBrochurePdf(document),
-      exportBrochureDocx(document),
-    ])
-    const zip = new JSZip()
-    const baseFileName = createSlug(document.companyName)
-
-    zip.file(`${baseFileName}.md`, renderBrochureMarkdown(document))
-    zip.file(`${baseFileName}.html`, renderBrochureHtml(document))
-    zip.file(`${baseFileName}.pdf`, pdfBuffer)
-    zip.file(`${baseFileName}.docx`, docxBuffer)
-    zip.file(
-      'manifest.json',
-      JSON.stringify(
-        {
-          companyName: document.companyName,
-          companyUrl: document.companyUrl,
-          audience: document.audience,
-          tone: document.tone,
-          createdAt: document.createdAt,
-          formats: ['md', 'html', 'pdf', 'docx'],
-        },
-        null,
-        2,
-      ),
-    )
-
-    const bundleBuffer = await zip.generateAsync({ type: 'nodebuffer' })
-
-    return {
-      ok: true,
-      format,
-      fileName: `${baseFileName}-bundle.zip`,
-      contentType: 'application/zip',
-      contentBase64: encodeBuffer(bundleBuffer),
-    }
-  }
-
-  if (format === 'pdf') {
-    const pdfBuffer = await exportBrochurePdf(document)
-
-    return {
-      ok: true,
-      format,
-      fileName: createBrochureFileName(document.companyName, 'pdf'),
-      contentType: 'application/pdf',
-      contentBase64: encodeBuffer(pdfBuffer),
-    }
-  }
-
-  return {
-    ok: false,
-    error: 'Unsupported export format.',
   }
 }
